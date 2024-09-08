@@ -1,0 +1,83 @@
+name: Template
+
+on:
+  # schedule:
+  #   - cron: "0 0 1 * *" # 每月1日, UTC 0:00 触发
+  workflow_dispatch: # 允许手动触发
+    inputs:
+      username:
+        description: "Please enter username"
+        required: true
+        default: "default_user"
+      environment:
+        description: "Choose a environment"
+        required: true
+        default: "Debug"
+  pull_request:
+    types:
+      - opened
+      - reopened
+    branches:
+      - main
+    paths:
+      - "."
+    # paths-ignore: 和paths为互斥选项
+
+jobs:
+  template-job:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.12"
+            
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Do something
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+          USERNAME: ${{ github.event.inputs.username }}
+          ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          python main.py
+
+      - name: Commit changes
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add .
+          git commit -m ":package: bot commit"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_tokem: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4.3.6
+        with:
+          name: "dataset"
+          path: "*.parquet"
+
+      - name: Release
+        uses: xresloader/upload-to-github-release@v1.6.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          file: "*.parquet"
+          draft: false
+          default_release_name: "Snapshot"
